@@ -153,3 +153,59 @@ a { color: inherit; }
   .brand-seal { width: 48px; height: 48px; font-size: 24px; }.brand-lockup h1 { font-size: 22px; }.brand-lockup span { display: none; }.methodology-banner { align-items: flex-start; }.methodology-banner p { font-size: 11px; line-height: 1.6; }.tab-bar button { padding: 14px 13px; font-size: 12px; }
   .run-rail { grid-template-columns: 1fr; }.origin-card { grid-template-columns: 1fr; }.origin-card__year { writing-mode: initial; padding: 17px; }.fate-grid, .metric-grid, .summary-grid, .event-grid, .evidence-list, .stress-grid, .stress-small-multiples { grid-template-columns: 1fr; }.fate-card { min-height: 0; }.timeline-control { grid-template-columns: 1fr; }.timeline-dates { grid-column: 1; }.timeline-brief { grid-template-columns: 1fr; }.historian-note { grid-template-columns: 1fr; }.persona-hero { display: block; }.persona-seal { margin-bottom: 14px; }.edge-row { grid-template-columns: 1fr; text-align: center; }.edge-row strong:last-child { text-align: center; }.evidence-controls { grid-template-columns: 1fr; }.evidence-controls > div { grid-column: auto; }.scenario-row { grid-template-columns: 145px 1fr 28px; }.site-footer { display: grid; padding: 24px 20px; }
 }
+
+/* Landing Page Styles */
+.landing-page { min-height: 100vh; }
+.hero-section { max-width: 1200px; margin: 0 auto; padding: clamp(60px, 10vw, 120px) 34px clamp(80px, 12vw, 140px); }
+.hero-content { max-width: 920px; margin: 0 auto; text-align: center; }
+.hero-badge { display: inline-block; padding: 8px 16px; background: rgba(200,164,91,.12); border: 1px solid rgba(200,164,91,.35); color: var(--gold-bright); font: 600 11px ui-monospace, monospace; letter-spacing: .14em; text-transform: uppercase; margin-bottom: 28px; }
+.hero-title { font-size: clamp(42px, 7vw, 68px); line-height: 1.2; letter-spacing: .06em; font-weight: 600; margin: 0 0 24px; background: linear-gradient(145deg, #f7f3e9, var(--gold-bright)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.hero-subtitle { font-size: clamp(16px, 2.2vw, 20px); line-height: 1.7; color: #b5c0bb; margin: 0 0 48px; max-width: 780px; margin-left: auto; margin-right: auto; }
+.hero-premise { background: linear-gradient(145deg, rgba(67,137,124,.08), rgba(200,164,91,.06)); border: 1px solid rgba(200,164,91,.24); border-left: 4px solid var(--jade); padding: 32px 36px; margin: 48px 0; text-align: left; display: grid; grid-template-columns: 60px 1fr; gap: 24px; align-items: start; }
+.premise-icon { width: 52px; height: 52px; display: grid; place-items: center; background: rgba(200,164,91,.15); border-radius: 50%; font-size: 26px; }
+.hero-premise h3 { margin: 0 0 12px; font-size: 19px; color: var(--gold-bright); font-weight: 500; }
+.hero-premise p { margin: 0; font-size: 15px; line-height: 1.85; color: #c0cac5; }
+.hero-premise strong { color: var(--gold-bright); font-weight: 600; }
+.hero-actions { display: flex; gap: 16px; justify-content: center; margin-top: 48px; flex-wrap: wrap; }
+.btn-primary, .btn-secondary { padding: 16px 32px; font-size: 16px; font-weight: 500; border-radius: 4px; text-decoration: none; transition: all .2s ease; display: inline-block; }
+.btn-primary { background: linear-gradient(145deg, var(--jade), #57a595); color: white; border: 1px solid rgba(255,255,255,.2); }
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(67,137,124,.35); }
+.btn-secondary { background: rgba(200,164,91,.08); color: var(--gold-bright); border: 1px solid rgba(200,164,91,.4); }
+.btn-secondary:hover { background: rgba(200,164,91,.15); border-color: var(--gold-bright); }
+
+.destiny-preview, .features-grid, .methodology-notice { max-width: 1200px; margin: 0 auto; padding: 60px 34px; }
+.section-header { text-align: center; margin-bottom: 48px; }
+.section-header h2 { font-size: clamp(32px, 4.5vw, 42px); margin: 0 0 12px; color: var(--gold-bright); font-weight: 500; }
+.section-header p { color: #9fafa8; font-size: 15px; margin: 0; }
+.destiny-bars { display: grid; gap: 18px; max-width: 900px; margin: 0 auto; }
+.destiny-bar-item { background: rgba(24,40,38,.6); border: 1px solid rgba(255,255,255,.08); padding: 20px 24px; transition: .2s ease; }
+.destiny-bar-item:hover { background: rgba(24,40,38,.85); border-color: rgba(255,255,255,.15); transform: translateX(4px); }
+.destiny-bar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.scenario-label { font-size: 16px; color: #d8ded9; font-weight: 500; }
+.scenario-share { font: 600 20px ui-monospace, monospace; color: var(--gold-bright); }
+.destiny-bar-track { height: 10px; background: rgba(255,255,255,.06); border-radius: 999px; overflow: hidden; margin-bottom: 8px; }
+.destiny-bar-fill { height: 100%; border-radius: 999px; transition: width .6s ease; }
+.scenario-count { color: #8a9a93; font-size: 12px; }
+
+.features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; padding-top: 40px; padding-bottom: 80px; }
+.feature-card { background: rgba(24,40,38,.6); border: 1px solid rgba(255,255,255,.08); padding: 32px 28px; text-align: center; transition: .25s ease; }
+.feature-card:hover { transform: translateY(-6px); border-color: rgba(200,164,91,.3); background: rgba(24,40,38,.85); }
+.feature-icon { font-size: 42px; margin-bottom: 20px; }
+.feature-card h3 { font-size: 19px; margin: 0 0 14px; color: var(--gold-bright); font-weight: 500; }
+.feature-card p { margin: 0; color: #a8b5af; font-size: 14px; line-height: 1.75; }
+
+.methodology-notice { background: rgba(182,100,62,.08); border: 1px solid rgba(182,100,62,.3); border-left: 4px solid var(--vermillion); padding: 36px 40px; }
+.methodology-notice h3 { margin: 0 0 16px; font-size: 18px; color: var(--vermillion); font-weight: 600; }
+.methodology-notice p { margin: 0; color: #c9d2cd; font-size: 14px; line-height: 1.85; }
+
+.landing-footer { max-width: 1200px; margin: 0 auto; padding: 40px 34px; border-top: 1px solid var(--line); text-align: center; color: #7a8b84; }
+.landing-footer p { margin: 8px 0; font-size: 13px; }
+.footer-meta { font: 11px ui-monospace, monospace; color: #6a7b74; }
+
+@media (max-width: 780px) {
+  .hero-premise { grid-template-columns: 1fr; text-align: center; }
+  .premise-icon { margin: 0 auto; }
+  .hero-actions { flex-direction: column; align-items: stretch; }
+  .btn-primary, .btn-secondary { text-align: center; }
+  .features-grid { grid-template-columns: 1fr; }
+}
