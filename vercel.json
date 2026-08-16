@@ -1,9 +1,3 @@
 {
-  "buildCommand": "npm run build",
-  "devCommand": "npm run dev",
-  "framework": "nextjs",
-  "installCommand": "npm install",
-  "github": {
-    "silent": false
-  }
+  "framework": "nextjs"
 }
