@@ -1,0 +1,17 @@
+{
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "framework": null,
+  "installCommand": "npm install",
+  "outputDirectory": "dist",
+  "env": {
+    "DEEPSEEK_API_KEY": {
+      "type": "secret",
+      "comment": "DeepSeek API Key from https://platform.deepseek.com/"
+    }
+  },
+  "regions": ["sin1", "hkg1"],
+  "github": {
+    "silent": false
+  }
+}
