@@ -4,7 +4,6 @@
   "framework": null,
   "installCommand": "npm install",
   "outputDirectory": "dist",
-  "regions": ["sin1", "hkg1"],
   "github": {
     "silent": false
   }
