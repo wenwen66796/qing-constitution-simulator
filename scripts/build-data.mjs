@@ -80,6 +80,37 @@ const compactTurn = (turn) => ({
   findings: (turn.findings ?? []).map(compactFinding),
   criticFlags: turn.critic_flags ?? [],
   randomDrawCount: (turn.random_draws ?? []).length,
+  // The public bundle deliberately excludes actor-private profile entries,
+  // private memories, and non-public commitments. It still exposes enough
+  // retrieval metadata to audit what institutional/public context shaped a
+  // turn without leaking a participant's private state.
+  worldbookActivations: Object.fromEntries(
+    Object.entries(turn.worldbook_activations ?? {}).map(([actorId, activations]) => [
+      actorId,
+      (activations ?? [])
+        .filter((activation) => !String(activation.entry_id).startsWith("actor."))
+        .map((activation) => ({
+          entryId: activation.entry_id,
+          title: activation.title,
+          promptSlot: activation.prompt_slot,
+          included: activation.included,
+          reason: activation.reason,
+          estimatedTokens: activation.estimated_tokens,
+          recursionDepth: activation.recursion_depth,
+          sourceClaimIds: activation.source_claim_ids ?? [],
+        })),
+    ])
+  ),
+  publicCommitments: (turn.state_after?.commitments ?? [])
+    .filter((commitment) => commitment.visibility === "public")
+    .map((commitment) => ({
+      id: commitment.id,
+      parties: commitment.parties ?? [],
+      terms: commitment.terms ?? [],
+      dueDate: commitment.due_date,
+      status: commitment.status,
+      enforceability: commitment.enforceability,
+    })),
 });
 
 const compactRun = (run) => ({

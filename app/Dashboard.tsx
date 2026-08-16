@@ -50,6 +50,24 @@ type CompactTurn = {
   }>;
   criticFlags: string[];
   randomDrawCount: number;
+  worldbookActivations: Record<string, Array<{
+    entryId: string;
+    title: string;
+    promptSlot: string;
+    included: boolean;
+    reason: string;
+    estimatedTokens: number;
+    recursionDepth: number;
+    sourceClaimIds: string[];
+  }>>;
+  publicCommitments: Array<{
+    id: string;
+    parties: string[];
+    terms: string[];
+    dueDate?: string;
+    status: string;
+    enforceability: string;
+  }>;
 };
 type CompactRun = {
   id: string;
@@ -145,6 +163,7 @@ const tabs = [
   ["制度", "制度权力图"],
   ["指标", "指标演变"],
   ["多轮", "多轮情景"],
+  ["世界书", "世界书与记忆"],
   ["证据", "史料证据"],
 ] as const;
 
@@ -530,6 +549,43 @@ function Evidence({ bundle }: { bundle: DashboardBundle }) {
   );
 }
 
+function Worldbook({ bundle, run }: { bundle: DashboardBundle; run: CompactRun }) {
+  const [turnIndex, setTurnIndex] = useState(Math.max(0, run.turns.length - 1));
+  useEffect(() => setTurnIndex(Math.max(0, run.turns.length - 1)), [run.id, run.turns.length]);
+  const turn = run.turns[Math.min(turnIndex, run.turns.length - 1)];
+  const nameById = Object.fromEntries(bundle.personas.map((persona) => [persona.id, persona.name]));
+  if (!turn) return <div className="empty-state">此运行没有可审计的世界书记录。</div>;
+  return (
+    <section className="section-stack">
+      <article className="analysis-card">
+        <span className="eyebrow">受约束的上下文检索</span>
+        <h2>世界书不是“万能背景词库”</h2>
+        <p>条目必须通过日期、可见性、行动者允许名单、状态条件、关键词或议程匹配，并受依赖深度与 prompt budget 限制。世界书只提供信息上下文；只有裁判与 StateReducer 能改变国家状态。</p>
+      </article>
+      <div className="timeline-control panel">
+        <div><span className="eyebrow">选择回合</span><h2>第 {turn.turn} 回合 · {turn.date}</h2></div>
+        <input type="range" min="0" max={Math.max(0, run.turns.length - 1)} value={turnIndex} onChange={(event) => setTurnIndex(Number(event.target.value))} aria-label="选择世界书回合" />
+        <div className="timeline-dates"><span>{run.turns[0]?.date}</span><span>{run.turns.at(-1)?.date}</span></div>
+      </div>
+      <div className="two-column">
+        {Object.entries(turn.worldbookActivations).map(([actorId, activations]) => {
+          const included = activations.filter((entry) => entry.included);
+          return <article className="panel compact-panel" key={actorId}>
+            <span className="eyebrow">{nameById[actorId] ?? actorId}</span>
+            <h3>本回合可见的公共/制度条目</h3>
+            {included.length ? <ul>{included.map((entry) => <li key={entry.entryId}><strong>{entry.title}</strong><br /><small>{entry.reason} · {entry.promptSlot} · 约 {entry.estimatedTokens} tokens</small>{entry.sourceClaimIds.length > 0 && <small><br />声明：{entry.sourceClaimIds.join(" · ")}</small>}</li>)}</ul> : <p className="muted">没有满足检索条件的公开条目。</p>}
+          </article>;
+        })}
+      </div>
+      <article className="panel">
+        <span className="eyebrow">公开政治承诺</span>
+        <h2>跨回合可追踪的协议</h2>
+        {turn.publicCommitments.length ? <div className="evidence-list">{turn.publicCommitments.map((commitment) => <article className="evidence-card" key={commitment.id}><header><span className="claim-type fact">{commitment.status}</span><strong>{commitment.enforceability}</strong></header><h3>{commitment.parties.map((id) => nameById[id] ?? id).join("、")}</h3><p>{commitment.terms.join("；")}</p><p>期限：{commitment.dueDate ?? "未设定"}</p></article>)}</div> : <p className="muted">本回合没有公开且仍可追踪的谈判承诺。私下协议不会出现在公共页面。</p>}
+      </article>
+    </section>
+  );
+}
+
 function Loading() {
   return <main className="loading-screen"><div className="loading-seal">宪</div><h1>清末立宪存续模拟器</h1><p>正在装载可审计的反事实历史工件……</p><i /></main>;
 }
@@ -581,10 +637,11 @@ export default function Dashboard() {
           {activeTab === "制度" && <InstitutionMap run={run} />}
           {activeTab === "指标" && <MetricEvolution run={run} />}
           {activeTab === "多轮" && <Ensemble bundle={bundle} />}
+          {activeTab === "世界书" && <Worldbook bundle={bundle} run={run} />}
           {activeTab === "证据" && <Evidence bundle={bundle} />}
         </div>
       </div>
-      <footer className="site-footer"><div><strong>清末立宪存续模拟器</strong><span>研究型反事实政治模拟 · Engine 0.6.0</span></div><p>historical plausibility &gt; entertaining dialogue · source provenance &gt; confident speculation</p></footer>
+      <footer className="site-footer"><div><strong>清末立宪存续模拟器</strong><span>研究型反事实政治模拟 · Engine 0.7.0</span></div><p>historical plausibility &gt; entertaining dialogue · source provenance &gt; confident speculation</p></footer>
     </main>
   );
 }

@@ -1,593 +1,323 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 
-type Decision = {
-  character: string;
-  characterId: string;
-  action: string;
-  reasoning: string;
-  targets: string[];
-  type: string;
-  publicity: string;
-  tone: string;
-  timestamp: string;
+type MetricMap = Record<string, number>;
+
+type TurnSummary = {
+  turn: number;
+  date: string;
+  agenda: string[];
+  active_actor_ids: string[];
+  worldbook_entries: Record<string, string[]>;
+  public_events: { phase: number; type: string; summary: string }[];
+  metrics: MetricMap;
+  critic_flags: string[];
 };
 
-type Character = {
-  id: string;
-  name: string;
-  faction: string;
-  role: string;
-  avatar?: string;
-  politicalObjectives: string[];
-  institutionalPreferences: string[];
-  allies: string[];
-  rivals: string[];
-  redLines: string[];
-  decisionStyle: string;
+type SimulationResult = {
+  run_id: string;
+  provider_mode: string;
+  engine_version: string;
+  final_date: string;
+  scenario: { code: string; label: string; rationale: string[]; secondary: string[] };
+  final_metrics: MetricMap;
+  fiscal: Record<string, number | string>;
+  turns: TurnSummary[];
+  warnings: string[];
+  notice: string;
+  data_handling: string;
 };
 
-type Metrics = {
-  central_legitimacy: number;
-  constitutional_norm_strength: number;
-  monarchy_legitimacy: number;
-  parliament_legitimacy: number;
-  coup_risk: number;
-  yuan_personal_power: number;
-  beiyang_cohesion: number;
-  revolutionary_mobilization: number;
+const METRIC_LABELS: Record<string, string> = {
+  central_legitimacy: "中央合法性",
+  parliament_legitimacy: "议会合法性",
+  constitutional_norm_strength: "宪政规范",
+  yuan_personal_power: "袁世凯个人权力",
+  beiyang_cohesion: "北洋凝聚力",
+  provincial_compliance: "省份服从度",
+  revolutionary_mobilization: "革命动员",
+  civilian_control_of_military: "军队文官控制",
+  central_revenue: "中央财政能力",
+  foreign_debt_pressure: "外债压力",
+  civil_war_risk: "内战风险",
+  coup_risk: "政变风险",
 };
 
-const INITIAL_METRICS: Metrics = {
-  central_legitimacy: 45,
-  constitutional_norm_strength: 35,
-  monarchy_legitimacy: 40,
-  parliament_legitimacy: 30,
-  coup_risk: 40,
-  yuan_personal_power: 70,
-  beiyang_cohesion: 65,
-  revolutionary_mobilization: 35,
+const ACTOR_LABELS: Record<string, string> = {
+  yuan_shikai: "袁世凯",
+  zhang_jian: "张謇",
+  tang_hualong: "汤化龙",
+  song_jiaoren: "宋教仁",
+  sun_yatsen: "孙中山",
+  huang_xing: "黄兴",
+  empress_dowager_longyu: "隆裕太后",
+  zaifeng: "载沣",
+  duan_qirui: "段祺瑞",
+  feng_guozhang: "冯国璋",
+  wang_shizhen: "王士珍",
+  li_yuanhong: "黎元洪",
+  cai_e: "蔡锷",
+  yan_xishan: "阎锡山",
+  liang_qichao: "梁启超",
+  yang_du: "杨度",
+  yikuang: "奕劻",
 };
 
-const CHARACTERS: Character[] = [
-  {
-    id: "yuan_shikai",
-    name: "袁世凯",
-    faction: "北洋实力派",
-    role: "内阁总理大臣",
-    politicalObjectives: ["掌握实权", "控制军队", "维持秩序"],
-    institutionalPreferences: ["强行政", "弱立法"],
-    allies: ["段祺瑞", "冯国璋"],
-    rivals: ["载沣", "良弼"],
-    redLines: ["军权旁落", "个人权力被剥夺"],
-    decisionStyle: "务实权谋，等待时机",
-  },
-  {
-    id: "zhang_jian",
-    name: "张謇",
-    faction: "立宪派",
-    role: "实业家、立宪领袖",
-    politicalObjectives: ["建立责任内阁", "议会监督行政", "地方自治"],
-    institutionalPreferences: ["英式君主立宪", "三权分立"],
-    allies: ["汤化龙", "梁启超"],
-    rivals: ["宗社党"],
-    redLines: ["宪法被废除", "议会被解散"],
-    decisionStyle: "温和改良，注重程序",
-  },
-  {
-    id: "zaifeng",
-    name: "载沣",
-    faction: "宗室保守派",
-    role: "摄政王（已被架空）",
-    politicalObjectives: ["保全皇室", "恢复部分权力"],
-    institutionalPreferences: ["保留君主实权"],
-    allies: ["良弼", "铁良"],
-    rivals: ["袁世凯", "立宪派"],
-    redLines: ["皇帝退位", "皇室财产被剥夺"],
-    decisionStyle: "保守谨慎，依赖亲信",
-  },
-  {
-    id: "liangbi",
-    name: "良弼",
-    faction: "宗社党",
-    role: "禁卫军统领",
-    politicalObjectives: ["保卫皇权", "对抗袁世凯"],
-    institutionalPreferences: ["君主专制"],
-    allies: ["载沣", "铁良"],
-    rivals: ["袁世凯", "革命党"],
-    redLines: ["皇权完全丧失"],
-    decisionStyle: "激进强硬，不惜政变",
-  },
-  {
-    id: "tang_hualong",
-    name: "汤化龙",
-    faction: "立宪派",
-    role: "湖北咨议局议长",
-    politicalObjectives: ["推动地方自治", "约束中央集权"],
-    institutionalPreferences: ["联邦制倾向"],
-    allies: ["张謇", "各省咨议局"],
-    rivals: ["中央集权派"],
-    redLines: ["地方自治被取消"],
-    decisionStyle: "地方本位，强调分权",
-  },
-];
+function actorName(id: string) {
+  return ACTOR_LABELS[id] ?? id;
+}
 
-const FACTION_COLORS: Record<string, string> = {
-  "北洋实力派": "#8b3a3a",
-  "立宪派": "#3d8a5e",
-  "宗室保守派": "#6b3a1a",
-  "宗社党": "#5a2a7a",
-};
+function metricColor(key: string, value: number) {
+  const risk = key.endsWith("_risk") || key === "foreign_debt_pressure";
+  const healthy = risk ? value < 45 : value >= 55;
+  return healthy ? "bg-emerald-500" : value >= 35 ? "bg-amber-500" : "bg-rose-500";
+}
 
-export default function ConversationalSimulator() {
-  const [history, setHistory] = useState<Decision[]>([]);
-  const [currentTurn, setCurrentTurn] = useState(1);
-  const [currentDate, setCurrentDate] = useState("1912-01-01");
-  const [metrics, setMetrics] = useState<Metrics>(INITIAL_METRICS);
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [userMode, setUserMode] = useState(false);
-  const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);
-  const [userAction, setUserAction] = useState("");
+export default function SimulatorPage() {
   const [apiKey, setApiKey] = useState("");
-  const [showApiKeyDialog, setShowApiKeyDialog] = useState(true);
+  const [provider, setProvider] = useState<"online" | "deterministic">("online");
+  const [mode, setMode] = useState<"quick" | "standard">("standard");
+  const [seed, setSeed] = useState("19111215");
+  const [endDate, setEndDate] = useState("1912-03-15");
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState<SimulationResult | null>(null);
 
-  const simulateNextTurn = async () => {
-    if (!apiKey) {
-      alert("请先输入API密钥");
-      setShowApiKeyDialog(true);
+  const selectedMetrics = useMemo(
+    () =>
+      result
+        ? Object.entries(result.final_metrics).filter(([key]) => key in METRIC_LABELS)
+        : [],
+    [result]
+  );
+
+  async function startSimulation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    if (provider === "online" && !apiKey.trim()) {
+      setError("在线模式需要临时输入 DeepSeek API Key。它不会保存到浏览器、数据库或模拟工件。");
       return;
     }
-
-    setIsSimulating(true);
-
-    // 随机选择2-3个活跃角色进行决策
-    const activeCharacters = CHARACTERS.slice(0, Math.floor(Math.random() * 2) + 2);
-
-    for (const character of activeCharacters) {
-      try {
-        const response = await fetch("/api/simulate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            character,
-            situation: { metrics, date: currentDate },
-            history,
-            apiKey,
-          }),
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-          setHistory((prev) => [...prev, data.decision]);
-
-          // 根据决策类型更新指标
-          setMetrics((prev) => updateMetrics(prev, data.decision));
-
-          // 视觉效果等待
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-        } else {
-          console.error("模拟失败:", data.error);
-          if (data.error.includes("API") || data.error.includes("密钥")) {
-            alert("API调用失败，请检查密钥是否正确");
-            setShowApiKeyDialog(true);
-          }
-        }
-      } catch (error) {
-        console.error("模拟错误:", error);
+    setRunning(true);
+    try {
+      const response = await fetch("/api/simulate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          apiKey: provider === "online" ? apiKey : undefined,
+          provider,
+          mode,
+          seed: Number(seed),
+          endDate,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.success) {
+        setError(payload.error ?? "模拟没有完成。请检查后端服务状态后重试。");
+        return;
       }
+      setResult(payload.result as SimulationResult);
+    } catch {
+      setError("无法连接模拟服务。请稍后重试。");
+    } finally {
+      setRunning(false);
     }
-
-    // 推进回合和日期
-    setCurrentTurn((prev) => prev + 1);
-    const nextDate = new Date(currentDate);
-    nextDate.setMonth(nextDate.getMonth() + 1);
-    setCurrentDate(nextDate.toISOString().split("T")[0]);
-
-    setIsSimulating(false);
-  };
-
-  const handleUserDecision = async () => {
-    if (!selectedCharacter || !userAction.trim()) return;
-
-    const userDecision: Decision = {
-      character: selectedCharacter.name,
-      characterId: selectedCharacter.id,
-      action: userAction,
-      reasoning: "用户决策",
-      targets: [],
-      type: "user_action",
-      publicity: "public",
-      tone: "neutral",
-      timestamp: new Date().toISOString(),
-    };
-
-    setHistory((prev) => [...prev, userDecision]);
-    setMetrics((prev) => updateMetrics(prev, userDecision));
-    setUserAction("");
-    setUserMode(false);
-
-    // Trigger AI characters to respond
-    await simulateNextTurn();
-  };
-
-  const updateMetrics = (prev: Metrics, decision: Decision): Metrics => {
-    const updates = { ...prev };
-
-    // 基于决策类型的简单启发式指标变化
-    switch (decision.type) {
-      case "constitutional_reform":
-        updates.constitutional_norm_strength += 10;
-        updates.parliament_legitimacy += 5;
-        updates.coup_risk += 5;
-        break;
-      case "power_struggle":
-        updates.yuan_personal_power += 8;
-        updates.coup_risk += 15;
-        updates.central_legitimacy -= 5;
-        break;
-      case "military_action":
-        updates.coup_risk += 20;
-        updates.beiyang_cohesion -= 10;
-        break;
-      case "negotiation":
-        updates.central_legitimacy += 3;
-        updates.coup_risk -= 3;
-        break;
-      case "fiscal_policy":
-        updates.central_legitimacy += 5;
-        break;
-    }
-
-    // 将值限制在0-100之间
-    Object.keys(updates).forEach((key) => {
-      updates[key as keyof Metrics] = Math.max(
-        0,
-        Math.min(100, updates[key as keyof Metrics])
-      );
-    });
-
-    return updates;
-  };
-
-  const exportTimeline = () => {
-    const exportData = {
-      turns: currentTurn,
-      startDate: "1912-01-01",
-      endDate: currentDate,
-      finalMetrics: metrics,
-      history,
-    };
-
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `清末立宪模拟_${currentDate}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  }
 
   return (
-    <div className="min-h-screen" style={{ background: "#080c18" }}>
-      {/* API密钥对话框 */}
-      {showApiKeyDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="max-w-md w-full mx-4 p-6 rounded-lg" style={{ background: "#0b0e1e", border: "1px solid #252540" }}>
-            <h3 className="text-xl font-bold mb-4" style={{ color: "#c8a84b" }}>
-              🔑 配置API密钥
-            </h3>
-            <p className="text-sm mb-4" style={{ color: "#ddd0b0" }}>
-              请输入你的DeepSeek API密钥以开始模拟历史。
-            </p>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="sk-xxxxxxxxxxxxxxxx"
-              className="w-full px-3 py-2 rounded-lg mb-4"
-              style={{
-                background: "#101228",
-                border: "1px solid #252540",
-                color: "#ddd0b0",
-              }}
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  if (apiKey.trim()) {
-                    setShowApiKeyDialog(false);
-                  } else {
-                    alert("请输入有效的API密钥");
-                  }
-                }}
-                className="flex-1 px-4 py-2 rounded-lg font-medium"
-                style={{
-                  background: "#2a5a4a",
-                  color: "#ddd0b0",
-                }}
-              >
-                确认
-              </button>
-              <button
-                onClick={() => setShowApiKeyDialog(false)}
-                className="px-4 py-2 rounded-lg"
-                style={{
-                  background: "#1a1530",
-                  border: "1px solid #3a3050",
-                  color: "#8a7a60",
-                }}
-              >
-                取消
-              </button>
-            </div>
-            <p className="text-xs mt-4" style={{ color: "#8a7a60" }}>
-              💡 获取密钥：<a href="https://platform.deepseek.com/" target="_blank" rel="noopener noreferrer" className="underline">https://platform.deepseek.com/</a>
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Header */}
-      <header className="border-b" style={{ borderColor: "#252540", background: "#0b0e1e" }}>
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <h1 className="text-2xl font-bold" style={{ color: "#c8a84b" }}>
-            🏛️ 清末立宪历史模拟器
-          </h1>
-          <p className="text-sm mt-1" style={{ color: "#8a7a60" }}>
-            对话式历史演化 · DeepSeek驱动 · 第{currentTurn}回合 · {currentDate}
+    <main className="min-h-screen bg-[#f7f3eb] text-stone-900">
+      <section className="border-b border-stone-300 bg-[#1f2a2e] text-stone-100">
+        <div className="mx-auto max-w-7xl px-6 py-14">
+          <p className="mb-3 text-sm tracking-[0.24em] text-amber-300">RESEARCH INSTRUMENT · 1911–1930</p>
+          <h1 className="max-w-4xl font-serif text-4xl leading-tight md:text-6xl">真实多 Agent 宪政反事实模拟</h1>
+          <p className="mt-5 max-w-3xl text-lg leading-8 text-stone-300">
+            人物只提交结构化意图；宪法、军事、财政与外交裁判决定结果。每回合使用冻结状态、信息权限、来源化 persona 与可审计世界书，而不是让角色自由聊天。
           </p>
         </div>
-      </header>
+      </section>
 
-      <div className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-12 gap-6">
-        {/* Left: Metrics Panel */}
-        <div className="col-span-3">
-          <div className="sticky top-6">
-            <h2 className="text-lg font-semibold mb-4" style={{ color: "#c8a84b" }}>
-              📊 当前局势
-            </h2>
-
-            <div className="space-y-3">
-              {Object.entries(metrics).map(([key, value]) => (
-                <div key={key}>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span style={{ color: "#8a7a60" }}>
-                      {key === "central_legitimacy" && "中央合法性"}
-                      {key === "constitutional_norm_strength" && "宪政规范"}
-                      {key === "monarchy_legitimacy" && "君主合法性"}
-                      {key === "parliament_legitimacy" && "议会合法性"}
-                      {key === "coup_risk" && "政变风险"}
-                      {key === "yuan_personal_power" && "袁世凯权力"}
-                      {key === "beiyang_cohesion" && "北洋凝聚力"}
-                      {key === "revolutionary_mobilization" && "革命动员"}
-                    </span>
-                    <span style={{ color: "#c8a84b" }}>{value.toFixed(0)}</span>
-                  </div>
-                  <div className="h-1.5 rounded-full" style={{ background: "#1e1e38" }}>
-                    <div
-                      className="h-full rounded-full"
-                      style={{
-                        background: value > 70 ? "#6a9a6a" : value < 30 ? "#9a6a6a" : "#c8a84b",
-                        width: `${value}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <button
-              onClick={simulateNextTurn}
-              disabled={isSimulating || userMode}
-              className="w-full mt-6 px-4 py-2.5 rounded-lg font-medium transition-all"
-              style={{
-                background: isSimulating || userMode ? "#252540" : "#1a1530",
-                border: "1px solid #3a3050",
-                color: isSimulating || userMode ? "#5a5a7a" : "#c8a84b",
-              }}
-            >
-              {isSimulating ? "⏳ 模拟中..." : "▶️ 推进一回合"}
-            </button>
-
-            <button
-              onClick={() => setUserMode(!userMode)}
-              disabled={isSimulating}
-              className="w-full mt-3 px-4 py-2.5 rounded-lg font-medium transition-all"
-              style={{
-                background: userMode ? "#1a3030" : "#1a1530",
-                border: `1px solid ${userMode ? "#3a6050" : "#3a3050"}`,
-                color: userMode ? "#6a9a6a" : "#8a7a60",
-              }}
-            >
-              {userMode ? "✅ 用户模式" : "🎭 扮演角色"}
-            </button>
-
-            <button
-              onClick={exportTimeline}
-              className="w-full mt-3 px-4 py-2 rounded-lg text-sm transition-all"
-              style={{
-                background: "#1a1530",
-                border: "1px solid #3a3050",
-                color: "#8a7a60",
-              }}
-            >
-              📥 导出时间轴
-            </button>
-
-            <button
-              onClick={() => setShowApiKeyDialog(true)}
-              className="w-full mt-3 px-4 py-2 rounded-lg text-sm transition-all"
-              style={{
-                background: "#1a1530",
-                border: "1px solid #3a3050",
-                color: "#8a7a60",
-              }}
-            >
-              🔑 修改API密钥
-            </button>
-          </div>
-        </div>
-
-        {/* Middle: Conversation Timeline */}
-        <div className="col-span-6">
-          <h2 className="text-lg font-semibold mb-4" style={{ color: "#c8a84b" }}>
-            💬 历史对话
-          </h2>
-
-          <div className="space-y-4">
-            {history.length === 0 && (
-              <div className="text-center py-12" style={{ color: "#5a5a7a" }}>
-                <p>点击"推进一回合"开始模拟历史...</p>
-                <p className="text-xs mt-2">首次运行需要配置API密钥</p>
-              </div>
-            )}
-
-            {history.map((decision, idx) => {
-              const character = CHARACTERS.find((c) => c.id === decision.characterId);
-              const factionColor = character ? FACTION_COLORS[character.faction] : "#5a5a7a";
-
-              return (
-                <div key={idx} className="flex gap-3">
-                  {/* Avatar */}
-                  <div
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold flex-shrink-0"
-                    style={{ background: factionColor, color: "#fff" }}
-                  >
-                    {decision.character[0]}
-                  </div>
-
-                  {/* Message Bubble */}
-                  <div className="flex-1">
-                    <div className="flex items-baseline gap-2 mb-1">
-                      <span className="font-semibold text-sm" style={{ color: "#c8a84b" }}>
-                        {decision.character}
-                      </span>
-                      <span className="text-xs" style={{ color: "#5a5a7a" }}>
-                        {character?.faction}
-                      </span>
-                    </div>
-
-                    <div
-                      className="p-3 rounded-lg"
-                      style={{ background: "#101228", border: "1px solid #252540" }}
-                    >
-                      <p className="text-sm" style={{ color: "#ddd0b0" }}>
-                        {decision.action}
-                      </p>
-
-                      {decision.reasoning && (
-                        <details className="mt-2">
-                          <summary
-                            className="text-xs cursor-pointer"
-                            style={{ color: "#8a7a60" }}
-                          >
-                            内心想法
-                          </summary>
-                          <p className="text-xs mt-1" style={{ color: "#8a7a60" }}>
-                            {decision.reasoning}
-                          </p>
-                        </details>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* User Input */}
-          {userMode && (
-            <div className="mt-6 p-4 rounded-lg" style={{ background: "#1a3030", border: "1px solid #3a6050" }}>
-              <h3 className="font-semibold mb-3" style={{ color: "#6a9a6a" }}>
-                🎭 你的回合
-              </h3>
-
+      <div className="mx-auto grid max-w-7xl gap-8 px-6 py-10 lg:grid-cols-[390px_1fr]">
+        <aside className="h-fit rounded-2xl border border-stone-300 bg-white p-6 shadow-sm lg:sticky lg:top-6">
+          <h2 className="font-serif text-2xl">运行一条新路径</h2>
+          <p className="mt-2 text-sm leading-6 text-stone-600">
+            默认只推进到 1912 年 3 月，控制公开演示的调用成本。结果不会覆写已发布的研究工件。
+          </p>
+          <form className="mt-6 space-y-4" onSubmit={startSimulation}>
+            <label className="block text-sm font-medium">
+              后端
               <select
-                value={selectedCharacter?.id || ""}
-                onChange={(e) => {
-                  const char = CHARACTERS.find((c) => c.id === e.target.value);
-                  setSelectedCharacter(char || null);
-                }}
-                className="w-full px-3 py-2 rounded-lg mb-3"
-                style={{
-                  background: "#101228",
-                  border: "1px solid #252540",
-                  color: "#ddd0b0",
-                }}
+                className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2"
+                value={provider}
+                onChange={(event) => setProvider(event.target.value as "online" | "deterministic")}
               >
-                <option value="">选择你要扮演的角色...</option>
-                {CHARACTERS.map((char) => (
-                  <option key={char.id} value={char.id}>
-                    {char.name} ({char.faction})
-                  </option>
-                ))}
+                <option value="online">在线模型（DeepSeek Flash）</option>
+                <option value="deterministic">离线确定性规则</option>
               </select>
-
-              <textarea
-                value={userAction}
-                onChange={(e) => setUserAction(e.target.value)}
-                placeholder="描述你的行动..."
-                rows={3}
-                className="w-full px-3 py-2 rounded-lg mb-3"
-                style={{
-                  background: "#101228",
-                  border: "1px solid #252540",
-                  color: "#ddd0b0",
-                }}
+            </label>
+            {provider === "online" && (
+              <label className="block text-sm font-medium">
+                DeepSeek API Key
+                <input
+                  className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 font-mono text-sm"
+                  type="password"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="仅在本次浏览器会话中保留"
+                  value={apiKey}
+                  onChange={(event) => setApiKey(event.target.value)}
+                />
+                <span className="mt-1 block text-xs font-normal leading-5 text-stone-500">
+                  仅通过服务端代理转发一次；不写入 LocalStorage、URL、日志、JSON 或 SQLite。
+                </span>
+              </label>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block text-sm font-medium">
+                模式
+                <select
+                  className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2"
+                  value={mode}
+                  onChange={(event) => setMode(event.target.value as "quick" | "standard")}
+                >
+                  <option value="standard">标准（最多 5 位在线人物/回合）</option>
+                  <option value="quick">快速（纯确定性）</option>
+                </select>
+              </label>
+              <label className="block text-sm font-medium">
+                Seed
+                <input
+                  className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 font-mono"
+                  inputMode="numeric"
+                  value={seed}
+                  onChange={(event) => setSeed(event.target.value.replace(/\D/g, ""))}
+                />
+              </label>
+            </div>
+            <label className="block text-sm font-medium">
+              终点日期
+              <input
+                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2"
+                type="date"
+                min="1911-12-15"
+                max="1913-12-31"
+                value={endDate}
+                onChange={(event) => setEndDate(event.target.value)}
               />
-
+            </label>
+            {error && <p className="rounded-lg bg-rose-50 p-3 text-sm leading-6 text-rose-800">{error}</p>}
+            <button
+              className="w-full rounded-lg bg-[#a9472d] px-4 py-3 font-semibold text-white transition hover:bg-[#8d3924] disabled:cursor-not-allowed disabled:opacity-60"
+              type="submit"
+              disabled={running}
+            >
+              {running ? "模拟运行中…" : "运行真实模拟内核"}
+            </button>
+            {apiKey && provider === "online" && (
               <button
-                onClick={handleUserDecision}
-                disabled={!selectedCharacter || !userAction.trim()}
-                className="px-4 py-2 rounded-lg font-medium"
-                style={{
-                  background: selectedCharacter && userAction.trim() ? "#2a5a4a" : "#252540",
-                  color: selectedCharacter && userAction.trim() ? "#ddd0b0" : "#5a5a7a",
-                }}
+                type="button"
+                className="w-full text-sm text-stone-500 underline"
+                onClick={() => setApiKey("")}
               >
-                🚀 执行决策
+                清除此页临时 API Key
               </button>
+            )}
+          </form>
+        </aside>
+
+        <section className="min-w-0">
+          {!result ? (
+            <div className="rounded-2xl border border-dashed border-stone-400 bg-white/70 p-10 text-center shadow-sm">
+              <p className="font-serif text-3xl">等待一条可审计的历史路径</p>
+              <p className="mx-auto mt-4 max-w-2xl leading-7 text-stone-600">
+                启动后，页面会展示 scenario、状态指标、公开事件和每名活跃人物实际检索到的世界书条目。不会显示或泄露任何人物的私密谈判与底线。
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-7">
+              <section className="rounded-2xl border border-stone-300 bg-white p-7 shadow-sm">
+                <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+                  <div>
+                    <p className="text-sm tracking-widest text-stone-500">完成于 {result.final_date} · {result.provider_mode === "online" ? "在线模型" : "确定性规则"}</p>
+                    <h2 className="mt-2 font-serif text-3xl">{result.scenario.code} · {result.scenario.label}</h2>
+                    <ul className="mt-4 list-disc space-y-1 pl-5 text-sm leading-6 text-stone-700">
+                      {result.scenario.rationale.map((item) => <li key={item}>{item}</li>)}
+                    </ul>
+                  </div>
+                  <div className="rounded-lg bg-stone-100 p-3 text-xs text-stone-600">
+                    <div>Run ID: <span className="font-mono">{result.run_id}</span></div>
+                    <div>Engine: {result.engine_version}</div>
+                  </div>
+                </div>
+                <p className="mt-5 border-t border-stone-200 pt-4 text-xs leading-5 text-stone-500">{result.notice}</p>
+              </section>
+
+              <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {selectedMetrics.map(([key, value]) => (
+                  <article key={key} className="rounded-xl border border-stone-300 bg-white p-4 shadow-sm">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-sm text-stone-600">{METRIC_LABELS[key]}</span>
+                      <strong className="font-serif text-2xl">{value}</strong>
+                    </div>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-stone-100">
+                      <div className={`h-full ${metricColor(key, value)}`} style={{ width: `${value}%` }} />
+                    </div>
+                  </article>
+                ))}
+              </section>
+
+              <section className="rounded-2xl border border-stone-300 bg-white p-7 shadow-sm">
+                <h2 className="font-serif text-2xl">回合时间线与世界书检索</h2>
+                <p className="mt-2 text-sm leading-6 text-stone-600">
+                  世界书只提供受证据约束的上下文，不能直接修改国家状态；每个回合都保存检索痕迹以供审计。
+                </p>
+                <div className="mt-6 space-y-6">
+                  {result.turns.map((turn) => (
+                    <article key={turn.turn} className="border-l-2 border-[#a9472d] pl-5">
+                      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                        <h3 className="font-semibold">第 {turn.turn} 回合 · {turn.date}</h3>
+                        <span className="text-sm text-stone-500">{turn.agenda.join(" · ")}</span>
+                      </div>
+                      <p className="mt-2 text-sm text-stone-600">
+                        活跃人物：{turn.active_actor_ids.map(actorName).join("、") || "无"}
+                      </p>
+                      <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                        <div className="rounded-lg bg-stone-50 p-3">
+                          <h4 className="text-xs font-semibold tracking-wide text-stone-500">公开事件</h4>
+                          {turn.public_events.length ? (
+                            <ul className="mt-2 space-y-2 text-sm leading-6">
+                              {turn.public_events.map((event, index) => <li key={`${event.phase}-${index}`}>{event.summary}</li>)}
+                            </ul>
+                          ) : <p className="mt-2 text-sm text-stone-500">本回合没有新增公开事件。</p>}
+                        </div>
+                        <div className="rounded-lg bg-amber-50 p-3">
+                          <h4 className="text-xs font-semibold tracking-wide text-stone-500">已激活的世界书条目</h4>
+                          {Object.keys(turn.worldbook_entries).length ? (
+                            <ul className="mt-2 space-y-2 text-sm leading-6">
+                              {Object.entries(turn.worldbook_entries).map(([actor, entries]) => (
+                                <li key={actor}><span className="font-medium">{actorName(actor)}：</span>{entries.join("；") || "无"}</li>
+                              ))}
+                            </ul>
+                          ) : <p className="mt-2 text-sm text-stone-500">本回合没有可见条目。</p>}
+                        </div>
+                      </div>
+                      {turn.critic_flags.length > 0 && <p className="mt-3 text-sm text-rose-700">合理性审计：{turn.critic_flags.join("；")}</p>}
+                    </article>
+                  ))}
+                </div>
+              </section>
+
+              {(result.warnings.length > 0 || result.data_handling) && (
+                <section className="rounded-2xl border border-amber-300 bg-amber-50 p-6 text-sm leading-6 text-amber-950">
+                  <h2 className="font-semibold">运行与数据处理说明</h2>
+                  <p className="mt-2">{result.data_handling}</p>
+                  {result.warnings.map((warning) => <p className="mt-2" key={warning}>• {warning}</p>)}
+                </section>
+              )}
             </div>
           )}
-        </div>
-
-        {/* Right: Character Cards */}
-        <div className="col-span-3">
-          <h2 className="text-lg font-semibold mb-4" style={{ color: "#c8a84b" }}>
-            👥 人物
-          </h2>
-
-          <div className="space-y-3">
-            {CHARACTERS.map((char) => (
-              <div
-                key={char.id}
-                className="p-3 rounded-lg"
-                style={{ background: "#101228", border: "1px solid #252540" }}
-              >
-                <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold mb-2"
-                  style={{ background: FACTION_COLORS[char.faction], color: "#fff" }}
-                >
-                  {char.name[0]}
-                </div>
-                <h3 className="font-semibold text-sm" style={{ color: "#c8a84b" }}>
-                  {char.name}
-                </h3>
-                <p className="text-xs mb-1" style={{ color: "#8a7a60" }}>
-                  {char.faction}
-                </p>
-                <p className="text-xs" style={{ color: "#8a7a60" }}>
-                  {char.role}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
+        </section>
       </div>
-    </div>
+    </main>
   );
 }

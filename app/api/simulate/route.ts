@@ -1,164 +1,99 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const DEEPSEEK_BASE_URL = "https://api.deepseek.com";
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-// 角色决策生成
+type IncomingPayload = {
+  apiKey?: unknown;
+  mode?: unknown;
+  seed?: unknown;
+  endDate?: unknown;
+  provider?: unknown;
+};
+
+function safeMode(value: unknown): "quick" | "standard" | "deep" {
+  return value === "quick" || value === "deep" || value === "standard"
+    ? value
+    : "standard";
+}
+
+function safeProvider(value: unknown): "online" | "deterministic" {
+  return value === "deterministic" ? "deterministic" : "online";
+}
+
+// This is a proxy, not an LLM implementation. The actual historical actor
+// protocol, worldbook retrieval, referee council, and StateReducer stay in the
+// Python service. The browser key is forwarded once and never logged or stored.
 export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const { character, situation, history, userAction, apiKey } = body;
-
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: "需要提供API密钥" },
-        { status: 400 }
-      );
-    }
-
-    // 构建角色决策提示词
-    const prompt = buildCharacterPrompt(character, situation, history, userAction);
-
-    // 调用DeepSeek API（使用flash模型）
-    const response = await fetch(`${DEEPSEEK_BASE_URL}/v1/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "deepseek-chat",
-        messages: [
-          {
-            role: "system",
-            content: "你正在模拟清末立宪时期（1911-1916）的历史人物。请根据人物性格、政治目标和当前局势生成真实的决策。"
-          },
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 1000,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("DeepSeek API错误:", errorText);
-      return NextResponse.json(
-        { error: "API调用失败", details: errorText },
-        { status: response.status }
-      );
-    }
-
-    const data = await response.json();
-    const decision = data.choices[0].message.content;
-
-    // 解析结构化决策
-    const parsedDecision = parseDecision(decision, character);
-
-    return NextResponse.json({
-      success: true,
-      character: character.name,
-      decision: parsedDecision,
-      rawResponse: decision,
-    });
-
-  } catch (error) {
-    console.error("模拟错误:", error);
+  const serviceUrl = process.env.QING_SIMULATION_API_URL?.replace(/\/$/, "");
+  if (!serviceUrl) {
     return NextResponse.json(
-      { error: "服务器内部错误", details: String(error) },
-      { status: 500 }
+      {
+        error: "模拟后端尚未配置",
+        code: "backend_not_configured",
+        message:
+          "公开页面已连接真实模拟内核；管理员还需要配置 QING_SIMULATION_API_URL。你的密钥没有被发送。",
+      },
+      { status: 503 }
     );
   }
-}
 
-function buildCharacterPrompt(
-  character: any,
-  situation: any,
-  history: any[],
-  userAction?: any
-): string {
-  let prompt = `你现在扮演**${character.name}**，时间是${situation.date}。
-
-## 你的身份信息
-- 政治立场：${character.politicalObjectives.join("、")}
-- 制度偏好：${character.institutionalPreferences.join("、")}
-- 盟友：${character.allies.join("、")}
-- 对手：${character.rivals.join("、")}
-- 红线：${character.redLines.join("；")}
-- 决策风格：${character.decisionStyle}
-
-## 当前局势
-- 中央合法性：${situation.metrics.central_legitimacy}
-- 宪政规范强度：${situation.metrics.constitutional_norm_strength}
-- 君主制合法性：${situation.metrics.monarchy_legitimacy}
-- 政变风险：${situation.metrics.coup_risk}
-- 袁世凯个人权力：${situation.metrics.yuan_personal_power}
-
-`;
-
-  if (history.length > 0) {
-    prompt += `## 最近发生的事件\n`;
-    history.slice(-5).forEach((event: any) => {
-      prompt += `- ${event.character}：${event.action}\n`;
-    });
-  }
-
-  if (userAction) {
-    prompt += `\n## 刚刚发生\n${userAction.character}做出决策：${userAction.action}\n`;
-  }
-
-  prompt += `\n## 你的决策
-请基于你的政治目标和当前局势，做出一个**具体的行动决策**。
-
-请用以下JSON格式回答：
-\`\`\`json
-{
-  "action": "你的具体行动（一句话）",
-  "reasoning": "你的内心想法（为什么这样做）",
-  "targets": ["受此行动影响的其他人物"],
-  "type": "constitutional_reform / power_struggle / military_action / negotiation / fiscal_policy",
-  "publicity": "public / private / secret",
-  "tone": "aggressive / cautious / conciliatory / neutral"
-}
-\`\`\`
-`;
-
-  return prompt;
-}
-
-function parseDecision(rawResponse: string, character: any): any {
+  let body: IncomingPayload;
   try {
-    // 从markdown代码块中提取JSON
-    const jsonMatch = rawResponse.match(/```json\s*([\s\S]*?)\s*```/);
-    const jsonStr = jsonMatch ? jsonMatch[1] : rawResponse;
+    body = (await request.json()) as IncomingPayload;
+  } catch {
+    return NextResponse.json({ error: "请求格式无效" }, { status: 400 });
+  }
 
-    const parsed = JSON.parse(jsonStr);
+  const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
+  const provider = safeProvider(body.provider);
+  if (provider === "online" && !apiKey) {
+    return NextResponse.json({ error: "在线模拟需要输入 DeepSeek API Key" }, { status: 400 });
+  }
 
-    return {
-      character: character.name,
-      characterId: character.id,
-      action: parsed.action || "观望局势",
-      reasoning: parsed.reasoning || "",
-      targets: parsed.targets || [],
-      type: parsed.type || "negotiation",
-      publicity: parsed.publicity || "public",
-      tone: parsed.tone || "neutral",
-      timestamp: new Date().toISOString(),
-    };
-  } catch (error) {
-    // 备用方案：从文本中提取关键信息
-    return {
-      character: character.name,
-      characterId: character.id,
-      action: rawResponse.slice(0, 200),
-      reasoning: "AI生成的回复",
-      targets: [],
-      type: "negotiation",
-      publicity: "public",
-      tone: "neutral",
-      timestamp: new Date().toISOString(),
-    };
+  const seed =
+    typeof body.seed === "number" && Number.isInteger(body.seed)
+      ? body.seed
+      : 19111215;
+  const endDate = typeof body.endDate === "string" ? body.endDate : "1912-03-15";
+
+  try {
+    const upstream = await fetch(`${serviceUrl}/v1/simulations`, {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json",
+        ...(apiKey ? { "X-Qing-DeepSeek-Key": apiKey } : {}),
+      },
+      body: JSON.stringify({
+        mode: safeMode(body.mode),
+        seed,
+        end_date: endDate,
+        provider,
+      }),
+    });
+    const result = await upstream.json().catch(() => null);
+    if (!upstream.ok) {
+      return NextResponse.json(
+        {
+          error:
+            typeof result?.detail === "string"
+              ? result.detail
+              : "模拟服务暂时无法完成请求，请检查服务状态后重试。",
+        },
+        { status: upstream.status >= 500 ? 502 : upstream.status }
+      );
+    }
+    return NextResponse.json(result, {
+      headers: { "Cache-Control": "no-store" },
+    });
+  } catch {
+    return NextResponse.json(
+      {
+        error: "无法连接模拟后端。请稍后重试，或联系管理员检查服务部署。",
+        code: "backend_unreachable",
+      },
+      { status: 502 }
+    );
   }
 }
