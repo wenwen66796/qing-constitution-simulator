@@ -1,9 +1,8 @@
 {
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
-  "framework": null,
+  "framework": "nextjs",
   "installCommand": "npm install",
-  "outputDirectory": "dist",
   "github": {
     "silent": false
   }
